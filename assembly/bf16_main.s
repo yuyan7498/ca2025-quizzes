@@ -28,6 +28,46 @@
 # =========================================
 # main: 測資整合（A~G）
 # =========================================
+
+# 1
+# 0
+# 1
+# 1
+# 0
+# 32704
+# 32640
+# 16256
+# 16128
+# 16256
+# 16258
+# 2143289344
+# 2139095040
+# 1065353216
+# 1056964608
+# 0
+# 16320
+# 0
+# 16256
+# 32640
+# 32704
+# 32705
+# 16128
+# 48960
+# 16128
+# 32640
+# 0
+# 32640
+# 32704
+# 32704
+# 16256
+# 16128
+# 32640
+# 32705
+# 0
+# 32704
+
+# Program exited with code: 0
+
 main:
     # ----------------------------
     # Section A: isnan / isinf / iszero
@@ -509,34 +549,42 @@ bf16_add:
     andi    t5, a1, 0x7F    # mant_b
 
     # ---- 特例: a exponent == 0xFF ----
+    #   If (exp_a == 0xFF) {
+    #       If (mant_a) return a;                 
+    #       If (exp_b == 0xFF)
+    #           return (mant_b || sign_a == sign_b) ? b 
+    #                  : BF16_NAN();                 
+    #       return a;
+    #   }
     li      t6, 0xFF
     bne     t2, t6, 1f      # if exp_a != 0xFF skip
 
     beq     t4, x0, La_is_inf       # mant_a==0 → a 是 Inf
-    mv      a0, a0              # mant_a!=0 → a 是 NaN，回傳 a
+    mv      a0, a0              # mant_a!=0 → a 
     ret
 La_is_inf:
-    bne     t3, t6, Lret_a      # exp_b!=0xFF → 回傳 a
+    bne     t3, t6, Lret_a      # exp_b!=0xFF →  a
     beq     t5, x0, 0f          # mant_b==0 →  Inf
-    mv      a0, a1              # mant_b!=0 → NaN，回傳 b
+    mv      a0, a1              # mant_b!=0 → NaN， b
     ret
 0:  # a=Inf, b=Inf
-    bne     t0, t1, Lret_NaN    # sign_a!=sign_b → NaN
-    mv      a0, a1              # sign_a==sign_b → 回傳 a
+    bne     t0, t1, Lret_NaN    # sign_a!=sign_b → NaN 
+    mv      a0, a1              # sign_a==sign_b → Inf
     ret
 Lret_NaN:
-    li      a0, 0x7FC0          # 回傳 NaN
+    li      a0, BF16_NAN          # BF16_NAN()
     ret
 Lret_a:
     mv      a0, a0
     ret
-    # ---- 特例: b exponent == 0xFF ----
+
+    #   If (exp_b == 0xFF) return b;
 1:
     bne     t3, t6, 2f
     mv      a0, a1
     ret
 
-    # ---- 特例: a == 0 → 回 b ----
+    #   If (!exp_a && !mant_a) return b;
 2:
     beq     t2, x0, 3f
     j       4f
@@ -547,7 +595,7 @@ Lret_b:
     mv      a0, a1
     ret
 
-    # ---- 特例: b == 0 → 回 a ----
+    #   If (!exp_b && !mant_b) return a;
 4:
     beq     t3, x0, 5f
     j       6f
@@ -558,7 +606,8 @@ Lret_a2:
     mv      a0, a0
     ret
 
-    # ---- 規格化(補 hidden bit 1) ----
+    #   If (exp_a) mant_a |= 0x80;
+    #   If (exp_b) mant_b |= 0x80;
 6:
     beq     t2, x0, 7f
     ori     t4, t4, 0x80    # mant_a |= 0x80
@@ -568,70 +617,111 @@ Lret_a2:
 8:
 
     # ---- 指數對齊 ----
+    #   int16_t exp_diff = exp_a - exp_b;
+    #   If (exp_diff > 0) {
+    #       result_exp = exp_a;
+    #       If (exp_diff > 8) return a;
+    #       mant_b >>= exp_diff;
+    #   } else if (exp_diff < 0) {
+    #       result_exp = exp_b;
+    #       If (exp_diff < -8) return b;
+    #       mant_a >>= -exp_diff;
+    #   } else {
+    #       result_exp = exp_a;
+    #   }
     sub     a2, t2, t3      # a2 = exp_a - exp_b
     beq     a2, x0, 9f      # if exp_a == exp_b skip
     blt     x0, a2, 10f     # if exp_a < exp_b
 
+    # exp_diff < 0（exp_a < exp_b）
     neg     a3, a2
     li      t6, 8
-    blt     t6, a3, Lret_b
-    srl     t4, t4, a3
-    mv      t6, t3
+    blt     t6, a3, Lret_b  # if -exp_diff > 8 → 回 b
+    srl     t4, t4, a3      # mant_a >>= -exp_diff
+    mv      t6, t3          # result_exp = exp_b
     j       11f
 10:
+    # exp_diff > 0（exp_a > exp_b）
     li      t6, 8
-    blt     t6, a2, Lret_a2
-    srl     t5, t5, a2
-    mv      t6, t2
+    blt     t6, a2, Lret_a2 # if  exp_diff > 8 → 回 a
+    srl     t5, t5, a2      # mant_b >>=  exp_diff
+    mv      t6, t2          # result_exp = exp_a
     j       11f
 9:
-    mv      t6, t2
+    # exp_diff == 0
+    mv      t6, t2          # result_exp = exp_a
 
 11:
+    # ---- 同號/異號處理 ----
+    #   If (sign_a == sign_b) {
+    #       result_sign = sign_a;
+    #       result_mant = (uint32_t)mant_a + mant_b;
+    #       If (result_mant & 0x100) {
+    #           result_mant >>= 1;
+    #           If (++result_exp >= 0xFF)
+    #               return { .bits = (result_sign<<15) | 0x7F80 }; // 溢位到 Inf
+    #       }
+    #   }
+    #   ELSE {
+    #       If (mant_a >= mant_b) { result_sign = sign_a; result_mant = mant_a - mant_b; }
+    #       ELSE { result_sign = sign_b; result_mant = mant_b - mant_a; }
+    #       If (!result_mant) return BF16_ZERO();
+    #       while (!(result_mant & 0x80)) {
+    #           result_mant <<= 1;
+    #           If (--result_exp <= 0) return BF16_ZERO();
+    #       }
+    #   }
     bne     t0, t1, Ldiff_sign
 
-    add     a4, t4, t5
-    mv      a3, t0
-    andi    a5, a4, 0x100
-    beq     a5, x0, Lpack
-    srli    a4, a4, 1
-    addi    t6, t6, 1
+    # 同號相加路徑
+    add     a4, t4, t5      # result_mant = mant_a + mant_b
+    mv      a3, t0          # result_sign = sign_a
+    andi    a5, a4, 0x100   
+    beq     a5, x0, Lpack   
+    srli    a4, a4, 1    
+    addi    t6, t6, 1       # result_exp++
     li      a5, 0xFF
-    blt     t6, a5, Lpack
+    blt     t6, a5, Lpack 
     slli    a3, a3, 15
-    li      a5, 0x7F80
+    li      a5, 0x7F80      # 溢位：回傳 ±Inf
     or      a0, a3, a5
     ret
 
 Ldiff_sign:
     bge     t4, t5, 12f
-    sub     a4, t5, t4
-    mv      a3, t1
+    sub     a4, t5, t4      # result_mant = mant_b - mant_a
+    mv      a3, t1          # result_sign = sign_b
     j       13f
 12:
-    sub     a4, t4, t5
-    mv      a3, t0
+    sub     a4, t4, t5      # result_mant = mant_a - mant_b
+    mv      a3, t0          # result_sign = sign_a
 13:
-    beq     a4, x0, Lret_zero
+    beq     a4, x0, Lret_zero   # if (!result_mant) return 0
 
 14:
+    # while (!(result_mant & 0x80)) { result_mant <<= 1; if (--result_exp <= 0) return 0; }
     andi    a5, a4, 0x80
-    bne     a5, x0, Lpack
-    slli    a4, a4, 1
-    addi    t6, t6, -1
-    blt     x0, t6, 14b
+    bne     a5, x0, Lpack      # 已有 hidden 1 → 結束規格化
+    slli    a4, a4, 1          # 左移補位
+    addi    t6, t6, -1         # result_exp--
+    blt     x0, t6, 14b        # 若 result_exp > 0 繼續規格化，否則回 0
 Lret_zero:
-    mv      a0, x0
+    mv      a0, x0             # BF16_ZERO()
     ret
 
 Lpack:
-    slli    a3, a3, 15
+    # ---- 打包回 bf16 ----
+    #   return (bf16_t){
+    #     .bits = (result_sign << 15) | ((result_exp & 0xFF) << 7) | (result_mant & 0x7F)
+    #   };
+    slli    a3, a3, 15           # (result_sign << 15)
     andi    a5, t6, 0xFF
-    slli    a5, a5, 7
-    andi    a4, a4, 0x7F
+    slli    a5, a5, 7            # ((result_exp & 0xFF) << 7)
+    andi    a4, a4, 0x7F         # (result_mant & 0x7F)
     or      a3, a3, a5
     or      a0, a3, a4
     ret
+
 
 # ==================================================================================
 # bf16_sub(a,b) = bf16_add(a, flip_sign(b))
@@ -661,6 +751,9 @@ bf16_sub:
 #
 # ==================================================================================
 bf16_mul:
+    #   sign_a = (a>>15)&1; sign_b = (b>>15)&1; sign = sign_a ^ sign_b
+    #   exp_a  = (a>>7)&0xFF; exp_b = (b>>7)&0xFF
+    #   mant_a = a&0x7F;      mant_b = b&0x7F
     srli    t0, a0, 15
     andi    t0, t0, 1
     srli    t1, a1, 15
@@ -673,18 +766,27 @@ bf16_mul:
     andi    t6, a1, 0x7F
     xor     t2, t0, t1
 
+    # IF (exp_a == 0xFF)
     li      a2, 0xFF
     bne     t3, a2, Lmul_chk_b
+    #   IF (mant_a != 0) return a; 
     bnez    t5, Lmul_ret_a
+    #   ELSE IF (exp_b == 0xFF) {  
     beqz    t4, Lmul_inf_x_zero_chk
+    #       return sign ? -Inf : +Inf
     j       Lmul_ret_sign_inf
 Lmul_inf_x_zero_chk:
+    #       IF (mant_b == 0) return NaN (Inf * 0)
     beqz    t6, Lmul_ret_nan
+    #       ELSE return Inf
     j       Lmul_ret_sign_inf
 
 Lmul_chk_b:
+    # ELSE IF (exp_b == 0xFF)
     bne     t4, a2, Lmul_check_zero
+    #   IF (mant_b != 0) return b;
     bnez    t6, Lmul_ret_b
+    #   ELSE IF (exp_a == 0) { if (mant_a==0) return NaN (0*Inf); else return Inf; }
     beqz    t3, Lmul_zero_inf_chk
     j       Lmul_ret_sign_inf
 Lmul_zero_inf_chk:
@@ -692,6 +794,7 @@ Lmul_zero_inf_chk:
     j       Lmul_ret_sign_inf
 
 Lmul_check_zero:
+    # IF a==0 OR b==0 → return signed zero
     beqz    t3, Lmul_a_mant0
     j       Lmul_b_zero
 Lmul_a_mant0:
@@ -704,6 +807,7 @@ Lmul_b_mant0:
 
 Lmul_norm_in:
     li      a4, 0
+    # IF (exp_a != 0) mant_a |= 0x80; ELSE 規格化 mant_a
     beqz    t3, Lmul_norm_a_sub
     ori     t5, t5, 0x80
     j       Lmul_norm_b_chk
@@ -715,9 +819,10 @@ Lmul_norm_a_loop:
     addi    a4, a4, -1
     j       Lmul_norm_a_loop
 Lmul_norm_a_done:
-    li      t3, 1
+    li      t3, 1 
 
 Lmul_norm_b_chk:
+    # IF (exp_b != 0) mant_b |= 0x80; ELSE 規格化 mant_b
     beqz    t4, Lmul_norm_b_sub
     ori     t6, t6, 0x80
     j       Lmul_do
@@ -732,9 +837,10 @@ Lmul_norm_b_done:
     li      t4, 1
 
 Lmul_do:
-    mv      a3, zero
-    mv      a5, t6
-    mv      a2, t5
+    #   prod = mant_a * mant_b
+    mv      a3, zero         # prod
+    mv      a5, t6           # mult
+    mv      a2, t5           # mcand
     li      t0, 8
 Lmul_loop:
     andi    t1, a5, 1
@@ -746,10 +852,12 @@ Lmul_skip_add:
     addi    t0, t0, -1
     bnez    t0, Lmul_loop
 
+    #   exp = (exp_a + exp_b + a4) - 127
     add     a2, t3, t4
     add     a2, a2, a4
     addi    a2, a2, -127
 
+    #   IF (prod & 0x8000) { mant = (prod>>8)&0x7F; exp++ } ELSE { mant=(prod>>7)&0x7F; }
     li      t0, 0x8000
     and     t1, a3, t0
     beqz    t1, Lmul_norm_else
@@ -761,6 +869,7 @@ Lmul_norm_else:
     srli    a3, a3, 7
     andi    a3, a3, 0x7F
 Lmul_after_norm:
+    # IF (exp >= 0xFF) return signed Inf
     li      t0, 0xFF
     blt     a2, t0, Lmul_under
 Lmul_ret_sign_inf:
@@ -770,22 +879,26 @@ Lmul_ret_sign_inf:
     jr      ra
 
 Lmul_under:
+    # IF (exp <= 0)
     blez    a2, Lmul_under_path
     j       Lmul_pack
 Lmul_under_path:
-    addi    t0, zero, -6
+    #   若 exp 小很多：直接回 signed 0
+    addi    t0, zero, -6     # 門檻（依實作）
     blt     a2, t0, Lmul_ret_sign_zero
+    #   否則：右移 mant（產生次正規）
     li      t1, 1
-    sub     t1, t1, a2
+    sub     t1, t1, a2       # shift = 1 - exp
     beqz    t1, Lmul_under_done
 Lmul_under_shift:
     srli    a3, a3, 1
     addi    t1, t1, -1
     bnez    t1, Lmul_under_shift
 Lmul_under_done:
-    mv      a2, zero
+    mv      a2, zero         # exp=0（次正規）
 
 Lmul_pack:
+    # bits = (sign<<15)|((exp&0xFF)<<7)|(mant&0x7F)
     slli    a0, t2, 15
     andi    t0, a2, 0xFF
     slli    t0, t0, 7
@@ -795,17 +908,22 @@ Lmul_pack:
     jr      ra
 
 Lmul_ret_nan:
+    # return NaN
     li      a0, 0x7FC0
     jr      ra
 Lmul_ret_a:
+    # return a（NaN 傳遞）
     mv      a0, a0
     jr      ra
 Lmul_ret_b:
+    # return b（NaN 傳遞）
     mv      a0, a1
     jr      ra
 Lmul_ret_sign_zero:
+    # return (sign<<15) | 0
     slli    a0, t2, 15
     jr      ra
+
 
 # ==================================================================================
 # bf16_div:
@@ -822,6 +940,7 @@ bf16_div:
     addi    sp, sp, -16
     sw      ra, 12(sp)
 
+    # sign/exp/mant
     srli    t0, a0, 15
     andi    t0, t0, 1
     srli    t1, a1, 15
@@ -834,43 +953,55 @@ bf16_div:
     andi    t5, a1, 0x007F
 
     xor     t6, t0, t1
-    slli    t6, t6, 15
+    slli    t6, t6, 15       # signed result = (sign_a ^ sign_b) << 15
 
+    # IF (b 是 Inf/NaN)
     li      a4, 0xFF
     bne     t3, a4, Ldiv_not_b_inf
+    #   IF (mant_b != 0) return b;
     bnez    t5, Ldiv_return_b
+    #   ELSE { // b 是 ±Inf
     li      a5, 0xFF
     bne     t2, a5, Ldiv_b_inf_zero
     bnez    t4, Ldiv_b_inf_zero
+    #       IF (a 是 ±0) return NaN
     li      a0, 0x7FC0
     j       Ldiv_ep
 Ldiv_b_inf_zero:
+    #       ELSE return signed 0 
     mv      a0, t6
     j       Ldiv_ep
 
 Ldiv_not_b_inf:
+    # ELSE IF
     beqz    t3, Ldiv_chk_b_mant
     j       Ldiv_chk_a_inf
 Ldiv_chk_b_mant:
+    #   IF (mant_b == 0)
     bnez    t5, Ldiv_chk_a_inf
+    #       IF (a.exp == 0) { if (a.mant==0) return NaN(0/0); else return ±Inf(非零/0); }
     beqz    t2, Ldiv_both_zero
     j       Ldiv_by_zero_ret_inf
 Ldiv_both_zero:
     beqz    t4, Ldiv_return_nan
 Ldiv_by_zero_ret_inf:
-    li      a0, 0x7F80
+    li      a0, 0x7F80       # ±Inf
     or      a0, a0, t6
     j       Ldiv_ep
 
 Ldiv_chk_a_inf:
+    # IF (a 是 Inf/NaN)
     li      a4, 0xFF
     bne     t2, a4, Ldiv_a_not_inf
+    #   IF (mant_a != 0) return a;   // NaN 傳遞
     bnez    t4, Ldiv_return_a
+    #   ELSE return signed Inf (Inf / finite)
     li      a0, 0x7F80
     or      a0, a0, t6
     j       Ldiv_ep
 
 Ldiv_a_not_inf:
+    # IF (a == 0) return signed 0
     beqz    t2, Ldiv_a_zero_path
     j       Ldiv_normals
 Ldiv_a_zero_path:
@@ -889,6 +1020,7 @@ Ldiv_return_nan:
     j       Ldiv_ep
 
 Ldiv_normals:
+    # 加隱藏位：IF (exp!=0) mant|=0x80
     beqz    t2, Ldiv_no_imp_a
     ori     t4, t4, 0x80
 Ldiv_no_imp_a:
@@ -896,25 +1028,27 @@ Ldiv_no_imp_a:
     ori     t5, t5, 0x80
 Ldiv_no_imp_b:
 
-    slli    a2, t4, 15
-    mv      a3, t5
-    li      a4, 0
-    li      a5, 0
+    # quotient = (mant_a << 15) / mant_b
+    slli    a2, t4, 15       # remainder
+    mv      a3, t5           # divisor
+    li      a4, 0            # quotient
+    li      a5, 0            # i=0
 Ldiv_loop_cond:
     li      a7, 16
     bge     a5, a7, Ldiv_loop_end
-    slli    a4, a4, 1
+    slli    a4, a4, 1        # quotient <<= 1
     li      a7, 15
     sub     a7, a7, a5
-    sll     a7, a3, a7
+    sll     a7, a3, a7       # divisor << (15 - i)
     bltu    a2, a7, Ldiv_no_sub
-    sub     a2, a2, a7
-    ori     a4, a4, 1
+    sub     a2, a2, a7       # remainder -= shifted_divisor
+    ori     a4, a4, 1        # quotient bit = 1
 Ldiv_no_sub:
     addi    a5, a5, 1
     j       Ldiv_loop_cond
 Ldiv_loop_end:
 
+    #   exp = (exp_a - exp_b) + 127 - (exp_a==0 ? 1:0) + (exp_b==0 ? 1:0)
     sub     a6, t2, t3
     li      a7, 127
     add     a6, a6, a7
@@ -929,6 +1063,7 @@ Ldiv_adj_b_do:
     addi    a6, a6, 1
 
 Ldiv_norm_start:
+    # IF (quot & 0x8000) mant = (quot>>8); ELSE 左移直到 MSB=1 再 >>8
     li      a7, 0x8000
     and     a7, a4, a7
     beqz    a7, Ldiv_shift_up
@@ -946,17 +1081,21 @@ Ldiv_norm_while:
     addi    a6, a6, -1
     j       Ldiv_norm_while
 Ldiv_done_up:
-    srli    a4, a4, 8
+    srli    a4, a4, 8          # 取 7-bit mantissa
 
 Ldiv_pack:
+    # 溢位/下溢判斷 + 打包
     andi    a4, a4, 0x7F
     li      a7, 0xFF
     blt     a6, a7, Ldiv_under
+    # OVERFLOW → ±Inf
     li      a0, 0x7F80
     or      a0, a0, t6
     j       Ldiv_ep
 Ldiv_under:
+    # IF (exp <= 0) return signed 0
     blez    a6, Ldiv_signed_zero
+    # 正常：bits = sign | (exp<<7) | mant
     andi    a6, a6, 0xFF
     slli    a6, a6, 7
     or      a0, t6, a6
@@ -969,6 +1108,7 @@ Ldiv_ep:
     lw      ra, 12(sp)
     addi    sp, sp, 16
     ret
+
 
 
 # ==================================================================================
@@ -992,7 +1132,7 @@ bf16_sqrt:
     sw s2, 20(sp)
     sw s3, 16(sp)
     sw s4, 12(sp)
-    sw s5, 8(sp)          # ★ 新增：保存 s5（用來取代原本錯用的 t7）
+    sw s5, 8(sp)
 
     mv      s0, a0          # s0 = a0 (input)
 
@@ -1005,9 +1145,9 @@ bf16_sqrt:
 
     #exp==0xFF
     li      t3, 0xFF
-    bne     t1, t3, sqrt_not_inf_nan   # exp != 0xFF → 走其他情況
+    bne     t1, t3, sqrt_not_inf_nan   # exp != 0xFF
 
-    bnez    t2, sqrt_ret_a            # mant != 0 → NaN 原樣回傳 a0
+    bnez    t2, sqrt_ret_a            # mant != 0 → NaN
     bnez    t0, sqrt_ret_nan          # mant == 0 且 sign != 0 (負無限) → 回傳 NaN
     j       sqrt_ret_a
 
@@ -1071,7 +1211,6 @@ sqrt_bsearch_loop:
     srai    t0, t0, 1       # t0 = mid
 
     # sq = (mid*mid)/128  ==> (mid*mid) >> 7
-    # ---- 使用 16 步的位移加法乘法來計算 mid*mid）----
     # t2: acc, a2: multiplicand(mid), a3: multiplier(mid), s5: counter
     mv      a2, t0
     mv      a3, t0
@@ -1150,7 +1289,7 @@ sqrt_ret_zero:                           # return 0 (underflow)
     li      a0, BF16_ZERO
     j       bf16_sqrt_end
 
-sqrt_ret_a:                              # 回傳 a（NaN 保留 payload/符號）
+sqrt_ret_a:
     mv      a0, s0
     j       bf16_sqrt_end
 
@@ -1166,6 +1305,6 @@ bf16_sqrt_end:
     lw s2, 20(sp)
     lw s3, 16(sp)
     lw s4, 12(sp)
-    lw s5, 8(sp)           # ★ 還原 s5
+    lw s5, 8(sp)
     addi sp, sp, 36
     ret
