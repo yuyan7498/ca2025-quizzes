@@ -144,7 +144,7 @@ sqrt_norm_loop:
 
 sqrt_need_shift:
     li      t1, 1
-    ble     s3, t1, norm_done
+    ble     s3, t1, sqrt_norm_done
     slli    t5, t5, 1
     addi    s3, s3, -1
     j       sqrt_norm_loop
@@ -161,10 +161,14 @@ sqrt_norm_done:
 
 sqrt_chk_underflow:
     # If (new_exp <= 0) return ZERO
-    blez    s3, ret_zero
+    blez    s3, sqrt_ret_zero
     # return (new_exp<<7) | new_mant
     slli    t1, s3, 7
     or      a0, t1, t0
+    j       bf16_sqrt_end
+
+sqrt_ret_zero:                           # return 0 (underflow)
+    li      a0, BF16_ZERO
     j       bf16_sqrt_end
 
 sqrt_ret_a:                              # 回傳 a（NaN 保留 payload/符號）
