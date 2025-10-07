@@ -101,8 +101,8 @@ after_new_exp:
     li      t5, 128             # result
 
 sqrt_bsearch_loop:
-    #while(low<high)
-    bge     s4, t6, sqrt_bsearch_done
+    # while (low <= high)
+    bgt     s4, t6, sqrt_bsearch_done
 
     #mid=(low+high)>>1
     add     t0, s4, t6      # reuse t0 as mid/temp
