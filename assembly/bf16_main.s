@@ -229,21 +229,33 @@ fail_msg:
 
 main:
 
-    # ----------------------------
-    # Section 0: test
-    # ----------------------------
-    la      t0, isnan_input
-    lw      t1, 0(t0)
-    addi    t0, t0, 4
-    li      t2, 0
-    la      t3, isnan_exp
+    # =========================================
+    # Section A1: bf16_isnan  （帶 count）
+    # =========================================
+    la      t0, isnan_input        # t0 = input base
+    lw      t1, 0(t0)              # t1 = count
+    addi    t0, t0, 4              # t0 -> first data
+    la      t3, isnan_exp          # t3 = exp base
+    li      t2, 0                  # i = 0
 
-test_loop:
-    bge     t2, t1, done
+A1_loop:
+    bge     t2, t1, A1_done
 
-    lw      t4, 0(t0)           # input 值
+    lw      t4, 0(t0)              # input
+    lw      t6, 0(t3)              # exp
 
-    # 呼叫前保存 caller-saved（t0–t3、ra）
+    # print "input:" value
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    # save caller-saved & call bf16_isnan(a0=input)
     addi    sp, sp, -20
     sw      t0, 0(sp)
     sw      t1, 4(sp)
@@ -253,9 +265,8 @@ test_loop:
 
     mv      a0, t4
     jal     ra, bf16_isnan
-    mv      t5, a0              # got
+    mv      t5, a0                 # got
 
-    # 還原
     lw      t0, 0(sp)
     lw      t1, 4(sp)
     lw      t2, 8(sp)
@@ -263,57 +274,821 @@ test_loop:
     lw      ra, 16(sp)
     addi    sp, sp, 20
 
-    lw      t6, 0(t3)           # exp
-
-    # 印 input/exp/got
-    la      a0, input_msg
-    li a7,4
-    ecall
-    mv      a0, t4
-    li a7,10
-    ecall
-    li      a0, 10
-    li a7,11
-    ecall
-
+    # print "exp:" exp " got:" got
     la      a0, exp_msg
-    li a7,4
+    li      a7, 4
     ecall
     mv      a0, t6
-    li a7,10
+    li      a7, 1
+    ecall
+    li      a0, 32                 # ' '
+    li      a7, 11
     ecall
     la      a0, got_msg
-    li a7,4
+    li      a7, 4
     ecall
     mv      a0, t5
-    li a7,1
+    li      a7, 1
     ecall
     li      a0, 10
-    li a7,11
+    li      a7, 11
     ecall
 
-    bne     t5, t6, print_fail
+    bne     t5, t6, A1_fail
     la      a0, pass_msg
-    li a7,4
+    li      a7, 4
     ecall
-    j       after_result
-print_fail:
+    j       A1_after
+A1_fail:
     la      a0, fail_msg
-    li a7,4
+    li      a7, 4
     ecall
-after_result:
+A1_after:
     li      a0, 10
-    li a7,11
+    li      a7, 11
     ecall
 
     addi    t0, t0, 4
     addi    t3, t3, 4
     addi    t2, t2, 1
-    j       test_loop
+    j       A1_loop
 
-done:
+A1_done:
+
+    # =========================================
+    # Section A2: bf16_isinf  （帶 count）
+    # =========================================
+    la      t0, isinf_input
+    lw      t1, 0(t0)
+    addi    t0, t0, 4
+    la      t3, isinf_exp
+    li      t2, 0
+
+A2_loop:
+    bge     t2, t1, A2_done
+
+    lw      t4, 0(t0)
+    lw      t6, 0(t3)
+
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    jal     ra, bf16_isinf
+    mv      t5, a0
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, A2_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       A2_after
+A2_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+A2_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 4
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       A2_loop
+
+A2_done:
+
+    # =========================================
+    # Section A3: bf16_iszero  （帶 count）
+    # =========================================
+    la      t0, iszero_input
+    lw      t1, 0(t0)
+    addi    t0, t0, 4
+    la      t3, iszero_exp
+    li      t2, 0
+
+A3_loop:
+    bge     t2, t1, A3_done
+
+    lw      t4, 0(t0)
+    lw      t6, 0(t3)
+
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    jal     ra, bf16_iszero
+    mv      t5, a0
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, A3_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       A3_after
+A3_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+A3_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 4
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       A3_loop
+
+A3_done:
+
+    # =========================================
+    # Section B: f32_to_bf16  （N=6）
+    # =========================================
+    la      t0, f32_to_bf16_input
+    la      t3, f32_to_bf16_exp
+    li      t1, 6                  # N
+    li      t2, 0
+
+B_loop:
+    bge     t2, t1, B_done
+
+    lw      t4, 0(t0)              # input f32 bits
+    lw      t6, 0(t3)              # exp bf16
+
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    jal     ra, f32_to_bf16
+    mv      t5, a0
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, B_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       B_after
+B_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+B_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 4
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       B_loop
+
+B_done:
+
+    # =========================================
+    # Section C: bf16_to_f32 （N=5）
+    # =========================================
+    la      t0, bf16_to_f32_input
+    la      t3, bf16_to_f32_exp
+    li      t1, 5
+    li      t2, 0
+
+C_loop:
+    bge     t2, t1, C_done
+
+    lw      t4, 0(t0)
+    lw      t6, 0(t3)
+
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    jal     ra, bf16_to_f32
+    mv      t5, a0
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, C_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       C_after
+C_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+C_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 4
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       C_loop
+
+C_done:
+
+    # =========================================
+    # Section D: bf16_add （N=6, 成對）
+    # =========================================
+    la      t0, bf16_add_input
+    la      t3, bf16_add_exp
+    li      t1, 6
+    li      t2, 0
+
+D_add_loop:
+    bge     t2, t1, D_add_done
+
+    lw      t4, 0(t0)              # a
+    lw      t5, 4(t0)              # b
+    lw      t6, 0(t3)              # exp
+
+    # print input: "input:" a ' ' b
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    mv      a1, t5
+    jal     ra, bf16_add
+    mv      t5, a0                  # got
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, D_add_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       D_add_after
+D_add_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+D_add_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 8
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       D_add_loop
+
+D_add_done:
+
+    # =========================================
+    # Section D-Sub: bf16_sub （N=1, 成對）
+    # =========================================
+    la      t0, bf16_sub_input
+    la      t3, bf16_sub_exp
+    li      t1, 1
+    li      t2, 0
+
+D_sub_loop:
+    bge     t2, t1, D_sub_done
+
+    lw      t4, 0(t0)
+    lw      t5, 4(t0)
+    lw      t6, 0(t3)
+
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    mv      a1, t5
+    jal     ra, bf16_sub
+    mv      t5, a0
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, D_sub_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       D_sub_after
+D_sub_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+D_sub_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 8
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       D_sub_loop
+
+D_sub_done:
+
+    # =========================================
+    # Section E: bf16_mul （N=1, 成對）
+    # =========================================
+    la      t0, bf16_mul_input
+    la      t3, bf16_mul_exp
+    li      t1, 1
+    li      t2, 0
+
+E_loop:
+    bge     t2, t1, E_done
+
+    lw      t4, 0(t0)
+    lw      t5, 4(t0)
+    lw      t6, 0(t3)
+
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    mv      a1, t5
+    jal     ra, bf16_mul
+    mv      t5, a0
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, E_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       E_after
+E_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+E_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 8
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       E_loop
+
+E_done:
+
+    # =========================================
+    # Section F: bf16_div （N=6, 成對）
+    # =========================================
+    la      t0, bf16_div_input
+    la      t3, bf16_div_exp
+    li      t1, 6
+    li      t2, 0
+
+F_loop:
+    bge     t2, t1, F_done
+
+    lw      t4, 0(t0)
+    lw      t5, 4(t0)
+    lw      t6, 0(t3)
+
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    mv      a1, t5
+    jal     ra, bf16_div
+    mv      t5, a0
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, F_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       F_after
+F_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+F_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 8
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       F_loop
+
+F_done:
+
+    # =========================================
+    # Section G: bf16_sqrt （N=6，單一輸入）
+    # =========================================
+    la      t0, bf16_sqrt_input
+    la      t3, bf16_sqrt_exp
+    li      t1, 6
+    li      t2, 0
+
+G_loop:
+    bge     t2, t1, G_done
+
+    lw      t4, 0(t0)
+    lw      t6, 0(t3)
+
+    la      a0, input_msg
+    li      a7, 4
+    ecall
+    mv      a0, t4
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    jal     ra, bf16_sqrt
+    mv      t5, a0
+
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    la      a0, exp_msg
+    li      a7, 4
+    ecall
+    mv      a0, t6
+    li      a7, 1
+    ecall
+    li      a0, 32
+    li      a7, 11
+    ecall
+    la      a0, got_msg
+    li      a7, 4
+    ecall
+    mv      a0, t5
+    li      a7, 1
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    bne     t5, t6, G_fail
+    la      a0, pass_msg
+    li      a7, 4
+    ecall
+    j       G_after
+G_fail:
+    la      a0, fail_msg
+    li      a7, 4
+    ecall
+G_after:
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    addi    t0, t0, 4
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       G_loop
+
+G_done:
     li      a0, 0
-    li      a7, 10
+    li      a7, 10                 # 程式結束（只在這裡用一次）
     ecall
 
 
