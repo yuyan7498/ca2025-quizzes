@@ -1,16 +1,4 @@
-    .text
-    .globl main
-    .globl bf16_isnan
-    .globl bf16_isinf
-    .globl bf16_iszero
-    .globl f32_to_bf16
-    .globl bf16_to_f32
-    .globl bf16_add
-    .globl bf16_sub
-    .globl bf16_mul
-    .globl bf16_div
-    .globl bf16_sqrt
-
+    .data
 # =========================================
 # 共用常數（bf16）
 # =========================================
@@ -24,6 +12,177 @@
     .equ BF16_NAN,       0x7FC0
     .equ BF16_ZERO,      0x0000
     .equ BF16_NEG_ZERO,  0x8000
+
+# =========================================
+# 測資
+# =========================================
+# =========================================
+# Section A
+# =========================================
+isnan_input:
+    .word   3
+    .word   0x7FC1
+    .word   0x7F80
+    .word   0x7FC1
+
+isnan_exp:
+    .word   1
+    .word   0
+    .word   1
+
+isinf_input:
+    .word   3
+    .word   0x7F80
+    .word   0x7FC1
+    .word   0x7F80
+
+isinf_exp:
+    .word   1
+    .word   0
+    .word   1
+
+iszero_input:
+    .word   2
+    .word   0x0000
+    .word   0x3F80
+
+iszero_exp:
+    .word   1
+    .word   0
+
+# =========================================
+# Section B
+# =========================================
+f32_to_bf16_input:
+    .word   0x7FC00000
+    .word   0x7F800000
+    .word   0x3F800000
+    .word   0x3F000000
+    .word   0x3F808000
+    .word   0x3F818000
+
+f32_to_bf16_exp:
+    .word   32704     # 0x7F80
+    .word   32640     # 0x7F40
+    .word   16256     # 0x3F80
+    .word   16128     # 0x3F00
+    .word   16256     # tie-even (even)
+    .word   16258     # tie-even (odd)
+
+# =========================================
+# Section C
+# =========================================
+bf16_to_f32_input:
+    .word   0x7FC0
+    .word   0x7F80
+    .word   0x3F80
+    .word   0x3F00
+    .word   0x0000
+
+bf16_to_f32_exp:
+    .word   2143289344
+    .word   2139095040
+    .word   1065353216
+    .word   1056964608
+    .word   0
+
+# =========================================
+# Section D
+# =========================================
+bf16_add_input:
+    .word   0x3F80, 0x3F00   # 1.0 + 0.5
+    .word   0x3F80, 0xBF80   # 1.0 + (-1.0)
+    .word   0x3F80, 0x3B00   # 1.0 + small
+    .word   0x7F80, 0x3F80   # Inf + 1.0
+    .word   0x7F80, 0xFF80   # +Inf + -Inf
+    .word   0x7FC1, 0x3F80   # NaN + 1.0
+
+bf16_add_exp:
+    .word   16320
+    .word   0
+    .word   16256
+    .word   32640
+    .word   32704
+    .word   32705
+
+bf16_sub_input:
+    .word   0x3F80, 0x3F00   # 1.0 - 0.5
+
+bf16_sub_exp:
+    .word   16128
+
+# =========================================
+# Section E
+# =========================================
+bf16_mul_input:
+    .word   0x3FC0, 0xBF00   # 1.5 * -0.5
+
+bf16_mul_exp:
+    .word   48960
+
+# =========================================
+# Section F
+# =========================================
+bf16_div_input:
+    .word   0x3F80, 0x4000   # 1 / 2
+    .word   0x3F80, 0x0000   # 1 / 0
+    .word   0x0000, 0x4000   # 0 / 2
+    .word   0x7F80, 0x4000   # Inf / 2
+    .word   0x7FC0, 0x3F80   # NaN / 1
+    .word   0x3F80, 0x7FC0   # 1 / NaN
+
+bf16_div_exp:
+    .word   16128
+    .word   32640
+    .word   0
+    .word   32640
+    .word   32704
+    .word   32704
+
+# =========================================
+# Section G
+# =========================================
+bf16_sqrt_input:
+    .word   0x3F80   # sqrt(1.0)
+    .word   0x3E80   # sqrt(0.25)
+    .word   0x7F80   # sqrt(+Inf)
+    .word   0x7FC1   # sqrt(NaN)
+    .word   0x0000   # sqrt(0)
+    .word   0xBF80   # sqrt(-1.0)
+
+bf16_sqrt_exp:
+    .word   16256
+    .word   16128
+    .word   32640
+    .word   32705
+    .word   0
+    .word   32704
+
+
+input_msg:
+    .string "input:"
+exp_msg:
+    .string "exp:"
+got_msg:
+    .string "got:"
+pass_msg:
+    .string "Pass"
+fail_msg:
+    .string "FAIL"
+
+
+    .text
+    .globl main
+    .globl bf16_isnan
+    .globl bf16_isinf
+    .globl bf16_iszero
+    .globl f32_to_bf16
+    .globl bf16_to_f32
+    .globl bf16_add
+    .globl bf16_sub
+    .globl bf16_mul
+    .globl bf16_div
+    .globl bf16_sqrt
 
 # =========================================
 # main: 測資整合（A~G）
@@ -69,6 +228,95 @@
 # Program exited with code: 0
 
 main:
+
+    # ----------------------------
+    # Section 0: test
+    # ----------------------------
+    la      t0, isnan_input
+    lw      t1, 0(t0)
+    addi    t0, t0, 4
+    li      t2, 0
+    la      t3, isnan_exp
+
+test_loop:
+    bge     t2, t1, done
+
+    lw      t4, 0(t0)           # input 值
+
+    # 呼叫前保存 caller-saved（t0–t3、ra）
+    addi    sp, sp, -20
+    sw      t0, 0(sp)
+    sw      t1, 4(sp)
+    sw      t2, 8(sp)
+    sw      t3, 12(sp)
+    sw      ra, 16(sp)
+
+    mv      a0, t4
+    jal     ra, bf16_isnan
+    mv      t5, a0              # got
+
+    # 還原
+    lw      t0, 0(sp)
+    lw      t1, 4(sp)
+    lw      t2, 8(sp)
+    lw      t3, 12(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+
+    lw      t6, 0(t3)           # exp
+
+    # 印 input/exp/got
+    la      a0, input_msg
+    li a7,4
+    ecall
+    mv      a0, t4
+    li a7,10
+    ecall
+    li      a0, 10
+    li a7,11
+    ecall
+
+    la      a0, exp_msg
+    li a7,4
+    ecall
+    mv      a0, t6
+    li a7,10
+    ecall
+    la      a0, got_msg
+    li a7,4
+    ecall
+    mv      a0, t5
+    li a7,1
+    ecall
+    li      a0, 10
+    li a7,11
+    ecall
+
+    bne     t5, t6, print_fail
+    la      a0, pass_msg
+    li a7,4
+    ecall
+    j       after_result
+print_fail:
+    la      a0, fail_msg
+    li a7,4
+    ecall
+after_result:
+    li      a0, 10
+    li a7,11
+    ecall
+
+    addi    t0, t0, 4
+    addi    t3, t3, 4
+    addi    t2, t2, 1
+    j       test_loop
+
+done:
+    li      a0, 0
+    li      a7, 10
+    ecall
+
+
     # ----------------------------
     # Section A: isnan / isinf / iszero
     # ----------------------------
