@@ -187,51 +187,10 @@ fail_msg:
 # =========================================
 # main: 測資整合（A~G）
 # =========================================
-
-# 1
-# 0
-# 1
-# 1
-# 0
-# 32704
-# 32640
-# 16256
-# 16128
-# 16256
-# 16258
-# 2143289344
-# 2139095040
-# 1065353216
-# 1056964608
-# 0
-# 16320
-# 0
-# 16256
-# 32640
-# 32704
-# 32705
-# 16128
-# 48960
-# 16128
-# 32640
-# 0
-# 32640
-# 32704
-# 32704
-# 16256
-# 16128
-# 32640
-# 32705
-# 0
-# 32704
-
-# Program exited with code: 0
-
 main:
-
-    # =========================================
+    # -------------------------------------
     # Section A1: bf16_isnan  （帶 count）
-    # =========================================
+    # -------------------------------------
     la      t0, isnan_input        # t0 = input base
     lw      t1, 0(t0)              # t1 = count
     addi    t0, t0, 4              # t0 -> first data
@@ -243,6 +202,7 @@ A1_loop:
 
     lw      t4, 0(t0)              # input
     lw      t6, 0(t3)              # exp
+    mv      s0, t6                 # <<< exp 存到 callee-saved
 
     # print "input:" value
     la      a0, input_msg
@@ -251,11 +211,11 @@ A1_loop:
     mv      a0, t4
     li      a7, 1
     ecall
-    li      a0, 10
+    li      a0, 10                 # '\n'
     li      a7, 11
     ecall
 
-    # save caller-saved & call bf16_isnan(a0=input)
+    # call bf16_isnan(a0=input)
     addi    sp, sp, -20
     sw      t0, 0(sp)
     sw      t1, 4(sp)
@@ -278,7 +238,7 @@ A1_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0                 # <<< exp
     li      a7, 1
     ecall
     li      a0, 32                 # ' '
@@ -287,14 +247,14 @@ A1_loop:
     la      a0, got_msg
     li      a7, 4
     ecall
-    mv      a0, t5
+    mv      a0, t5                 # got
     li      a7, 1
     ecall
     li      a0, 10
     li      a7, 11
     ecall
 
-    bne     t5, t6, A1_fail
+    bne     t5, s0, A1_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -312,12 +272,11 @@ A1_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       A1_loop
-
 A1_done:
 
-    # =========================================
+    # -------------------------------------
     # Section A2: bf16_isinf  （帶 count）
-    # =========================================
+    # -------------------------------------
     la      t0, isinf_input
     lw      t1, 0(t0)
     addi    t0, t0, 4
@@ -329,6 +288,7 @@ A2_loop:
 
     lw      t4, 0(t0)
     lw      t6, 0(t3)
+    mv      s0, t6                 # <<< exp → s0
 
     la      a0, input_msg
     li      a7, 4
@@ -361,7 +321,7 @@ A2_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -377,7 +337,7 @@ A2_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, A2_fail
+    bne     t5, s0, A2_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -395,12 +355,11 @@ A2_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       A2_loop
-
 A2_done:
 
-    # =========================================
+    # -------------------------------------
     # Section A3: bf16_iszero  （帶 count）
-    # =========================================
+    # -------------------------------------
     la      t0, iszero_input
     lw      t1, 0(t0)
     addi    t0, t0, 4
@@ -412,6 +371,7 @@ A3_loop:
 
     lw      t4, 0(t0)
     lw      t6, 0(t3)
+    mv      s0, t6                 # <<< exp → s0
 
     la      a0, input_msg
     li      a7, 4
@@ -444,7 +404,7 @@ A3_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -460,7 +420,7 @@ A3_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, A3_fail
+    bne     t5, s0, A3_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -478,15 +438,14 @@ A3_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       A3_loop
-
 A3_done:
 
-    # =========================================
+    # -------------------------------------
     # Section B: f32_to_bf16  （N=6）
-    # =========================================
+    # -------------------------------------
     la      t0, f32_to_bf16_input
     la      t3, f32_to_bf16_exp
-    li      t1, 6                  # N
+    li      t1, 6
     li      t2, 0
 
 B_loop:
@@ -494,6 +453,7 @@ B_loop:
 
     lw      t4, 0(t0)              # input f32 bits
     lw      t6, 0(t3)              # exp bf16
+    mv      s0, t6
 
     la      a0, input_msg
     li      a7, 4
@@ -526,7 +486,7 @@ B_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -542,7 +502,7 @@ B_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, B_fail
+    bne     t5, s0, B_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -560,12 +520,11 @@ B_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       B_loop
-
 B_done:
 
-    # =========================================
+    # -------------------------------------
     # Section C: bf16_to_f32 （N=5）
-    # =========================================
+    # -------------------------------------
     la      t0, bf16_to_f32_input
     la      t3, bf16_to_f32_exp
     li      t1, 5
@@ -576,6 +535,7 @@ C_loop:
 
     lw      t4, 0(t0)
     lw      t6, 0(t3)
+    mv      s0, t6
 
     la      a0, input_msg
     li      a7, 4
@@ -608,7 +568,7 @@ C_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -624,7 +584,7 @@ C_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, C_fail
+    bne     t5, s0, C_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -642,12 +602,11 @@ C_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       C_loop
-
 C_done:
 
-    # =========================================
+    # -------------------------------------
     # Section D: bf16_add （N=6, 成對）
-    # =========================================
+    # -------------------------------------
     la      t0, bf16_add_input
     la      t3, bf16_add_exp
     li      t1, 6
@@ -659,8 +618,9 @@ D_add_loop:
     lw      t4, 0(t0)              # a
     lw      t5, 4(t0)              # b
     lw      t6, 0(t3)              # exp
+    mv      s0, t6
 
-    # print input: "input:" a ' ' b
+    # print "input:" a ' ' b
     la      a0, input_msg
     li      a7, 4
     ecall
@@ -699,7 +659,7 @@ D_add_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -715,7 +675,7 @@ D_add_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, D_add_fail
+    bne     t5, s0, D_add_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -733,12 +693,11 @@ D_add_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       D_add_loop
-
 D_add_done:
 
-    # =========================================
+    # -------------------------------------
     # Section D-Sub: bf16_sub （N=1, 成對）
-    # =========================================
+    # -------------------------------------
     la      t0, bf16_sub_input
     la      t3, bf16_sub_exp
     li      t1, 1
@@ -750,6 +709,7 @@ D_sub_loop:
     lw      t4, 0(t0)
     lw      t5, 4(t0)
     lw      t6, 0(t3)
+    mv      s0, t6
 
     la      a0, input_msg
     li      a7, 4
@@ -789,7 +749,7 @@ D_sub_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -805,7 +765,7 @@ D_sub_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, D_sub_fail
+    bne     t5, s0, D_sub_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -823,12 +783,11 @@ D_sub_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       D_sub_loop
-
 D_sub_done:
 
-    # =========================================
+    # -------------------------------------
     # Section E: bf16_mul （N=1, 成對）
-    # =========================================
+    # -------------------------------------
     la      t0, bf16_mul_input
     la      t3, bf16_mul_exp
     li      t1, 1
@@ -840,6 +799,7 @@ E_loop:
     lw      t4, 0(t0)
     lw      t5, 4(t0)
     lw      t6, 0(t3)
+    mv      s0, t6
 
     la      a0, input_msg
     li      a7, 4
@@ -879,7 +839,7 @@ E_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -895,7 +855,7 @@ E_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, E_fail
+    bne     t5, s0, E_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -913,12 +873,11 @@ E_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       E_loop
-
 E_done:
 
-    # =========================================
+    # -------------------------------------
     # Section F: bf16_div （N=6, 成對）
-    # =========================================
+    # -------------------------------------
     la      t0, bf16_div_input
     la      t3, bf16_div_exp
     li      t1, 6
@@ -930,6 +889,7 @@ F_loop:
     lw      t4, 0(t0)
     lw      t5, 4(t0)
     lw      t6, 0(t3)
+    mv      s0, t6
 
     la      a0, input_msg
     li      a7, 4
@@ -969,7 +929,7 @@ F_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -985,7 +945,7 @@ F_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, F_fail
+    bne     t5, s0, F_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -1003,12 +963,11 @@ F_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       F_loop
-
 F_done:
 
-    # =========================================
+    # -------------------------------------
     # Section G: bf16_sqrt （N=6，單一輸入）
-    # =========================================
+    # -------------------------------------
     la      t0, bf16_sqrt_input
     la      t3, bf16_sqrt_exp
     li      t1, 6
@@ -1019,6 +978,7 @@ G_loop:
 
     lw      t4, 0(t0)
     lw      t6, 0(t3)
+    mv      s0, t6
 
     la      a0, input_msg
     li      a7, 4
@@ -1051,7 +1011,7 @@ G_loop:
     la      a0, exp_msg
     li      a7, 4
     ecall
-    mv      a0, t6
+    mv      a0, s0
     li      a7, 1
     ecall
     li      a0, 32
@@ -1067,7 +1027,7 @@ G_loop:
     li      a7, 11
     ecall
 
-    bne     t5, t6, G_fail
+    bne     t5, s0, G_fail
     la      a0, pass_msg
     li      a7, 4
     ecall
@@ -1085,344 +1045,8 @@ G_after:
     addi    t3, t3, 4
     addi    t2, t2, 1
     j       G_loop
-
 G_done:
     li      a0, 0
-    li      a7, 10                 # 程式結束（只在這裡用一次）
-    ecall
-
-
-    # ----------------------------
-    # Section A: isnan / isinf / iszero
-    # ----------------------------
-    # A1
-    li      a0, 0x7FC1
-    jal     ra, bf16_isnan
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # A2
-    li      a0, 0x7F80
-    jal     ra, bf16_isnan
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # A3
-    li      a0, 0x7F80
-    jal     ra, bf16_isinf
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # A4
-    li      a0, 0x0000
-    jal     ra, bf16_iszero
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # A5
-    li      a0, 0x3F80
-    jal     ra, bf16_iszero
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-
-    # ----------------------------
-    # Section B: f32_to_bf16
-    # ----------------------------
-    # B1
-    li      a0, 0x7FC00000
-    jal     ra, f32_to_bf16
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # B2
-    li      a0, 0x7F800000
-    jal     ra, f32_to_bf16
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # B3
-    li      a0, 0x3F800000
-    jal     ra, f32_to_bf16
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # B4
-    li      a0, 0x3F000000
-    jal     ra, f32_to_bf16
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # B5 tie-even (even)
-    li      a0, 0x3F808000
-    jal     ra, f32_to_bf16
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # B6 tie-even (odd)
-    li      a0, 0x3F818000
-    jal     ra, f32_to_bf16
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-
-    # ----------------------------
-    # Section C: bf16_to_f32
-    # ----------------------------
-    # C1
-    li      a0, 0x7FC0
-    jal     ra, bf16_to_f32
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # C2
-    li      a0, 0x7F80
-    jal     ra, bf16_to_f32
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # C3
-    li      a0, 0x3F80
-    jal     ra, bf16_to_f32
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # C4
-    li      a0, 0x3F00
-    jal     ra, bf16_to_f32
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # C5
-    li      a0, 0x0000
-    jal     ra, bf16_to_f32
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-
-    # ----------------------------
-    # Section D: add / sub
-    # ----------------------------
-    # D1
-    li      a0, 0x3F80
-    li      a1, 0x3F00
-    jal     ra, bf16_add
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # D2
-    li      a0, 0x3F80
-    li      a1, 0xBF80
-    jal     ra, bf16_add
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # D3
-    li      a0, 0x3F80
-    li      a1, 0x3B00
-    jal     ra, bf16_add
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # D4
-    li      a0, 0x7F80
-    li      a1, 0x3F80
-    jal     ra, bf16_add
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # D5
-    li      a0, 0x7F80
-    li      a1, 0xFF80
-    jal     ra, bf16_add
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # D6
-    li      a0, 0x7FC1
-    li      a1, 0x3F80
-    jal     ra, bf16_add
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # D7 (sub)
-    li      a0, 0x3F80
-    li      a1, 0x3F00
-    jal     ra, bf16_sub
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-
-    # ----------------------------
-    # Section E: mul
-    # ----------------------------
-    # E1
-    li      a0, 0x3FC0
-    li      a1, 0xBF00
-    jal     ra, bf16_mul
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-
-    # ----------------------------
-    # Section F: div
-    # ----------------------------
-    # F1
-    li      a0, 0x3F80
-    li      a1, 0x4000
-    jal     ra, bf16_div
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # F2
-    li      a0, 0x3F80
-    li      a1, 0x0000
-    jal     ra, bf16_div
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # F3
-    li      a0, 0x0000
-    li      a1, 0x4000
-    jal     ra, bf16_div
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # F4
-    li      a0, 0x7F80
-    li      a1, 0x4000
-    jal     ra, bf16_div
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # F5
-    li      a0, 0x7FC0
-    li      a1, 0x3F80
-    jal     ra, bf16_div
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # F6
-    li      a0, 0x3F80
-    li      a1, 0x7FC0
-    jal     ra, bf16_div
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-
-    # ----------------------------
-    # Section G: sqrt
-    # ----------------------------
-    # G1: sqrt(1.0=0x3F80) -> 0x3F80
-    li      a0, 0x3F80
-    jal     ra, bf16_sqrt
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # G2: sqrt(0.25=0x3E80) -> 0x3F00 (0.5)
-    li      a0, 0x3E80
-    jal     ra, bf16_sqrt
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # G3: sqrt(+Inf) -> +Inf
-    li      a0, BF16_POS_INF
-    jal     ra, bf16_sqrt
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # G4: sqrt(NaN) -> NaN (回傳 a)
-    li      a0, 0x7FC1
-    jal     ra, bf16_sqrt
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # G5: sqrt(0) -> 0
-    li      a0, 0x0000
-    jal     ra, bf16_sqrt
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-    # G6: sqrt(負數) -> NaN
-    li      a0, 0xBF80           # -1.0
-    jal     ra, bf16_sqrt
-    li      a7, 1
-    ecall
-    li      a0, 10
-    li      a7, 11
-    ecall
-
-    # 結束
     li      a7, 10
     ecall
 
