@@ -16,6 +16,18 @@
 # =========================================
 # 測資
 # =========================================
+start_msg:   .string "===== START TEST RUN ====="
+end_msg:     .string "===== END TEST RUN ====="
+secA1_msg:   .string "--- Section A1: isnan ---"
+secA2_msg:   .string "--- Section A2: isinf ---"
+secA3_msg:   .string "--- Section A3: iszero ---"
+secB_msg:    .string "--- Section B: f32 -> bf16 ---"
+secC_msg:    .string "--- Section C: bf16 -> f32 ---"
+secD_add_msg:.string "--- Section D: add ---"
+secD_sub_msg:.string "--- Section D: sub ---"
+secE_msg:    .string "--- Section E: mul ---"
+secF_msg:    .string "--- Section F: div ---"
+secG_msg:    .string "--- Section G: sqrt ---"
 # =========================================
 # Section A
 # =========================================
@@ -173,24 +185,29 @@ fail_msg:
 
     .text
     .globl main
-    .globl bf16_isnan
-    .globl bf16_isinf
-    .globl bf16_iszero
-    .globl f32_to_bf16
-    .globl bf16_to_f32
-    .globl bf16_add
-    .globl bf16_sub
-    .globl bf16_mul
-    .globl bf16_div
-    .globl bf16_sqrt
 
 # =========================================
 # main: 測資整合（A~G）
 # =========================================
 main:
+    # ---- RUN START BANNER ----
+    la      a0, start_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     # -------------------------------------
     # Section A1: bf16_isnan  （帶 count）
     # -------------------------------------
+    la      a0, secA1_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, isnan_input        # t0 = input base
     lw      t1, 0(t0)              # t1 = count
     addi    t0, t0, 4              # t0 -> first data
@@ -277,6 +294,13 @@ A1_done:
     # -------------------------------------
     # Section A2: bf16_isinf  （帶 count）
     # -------------------------------------
+    la      a0, secA2_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, isinf_input
     lw      t1, 0(t0)
     addi    t0, t0, 4
@@ -360,6 +384,13 @@ A2_done:
     # -------------------------------------
     # Section A3: bf16_iszero  （帶 count）
     # -------------------------------------
+    la      a0, secA3_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, iszero_input
     lw      t1, 0(t0)
     addi    t0, t0, 4
@@ -443,6 +474,13 @@ A3_done:
     # -------------------------------------
     # Section B: f32_to_bf16  （N=6）
     # -------------------------------------
+    la      a0, secB_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, f32_to_bf16_input
     la      t3, f32_to_bf16_exp
     li      t1, 6
@@ -525,6 +563,13 @@ B_done:
     # -------------------------------------
     # Section C: bf16_to_f32 （N=5）
     # -------------------------------------
+    la      a0, secC_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, bf16_to_f32_input
     la      t3, bf16_to_f32_exp
     li      t1, 5
@@ -607,6 +652,13 @@ C_done:
     # -------------------------------------
     # Section D: bf16_add （N=6, 成對）
     # -------------------------------------
+    la      a0, secD_add_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, bf16_add_input
     la      t3, bf16_add_exp
     li      t1, 6
@@ -698,6 +750,13 @@ D_add_done:
     # -------------------------------------
     # Section D-Sub: bf16_sub （N=1, 成對）
     # -------------------------------------
+    la      a0, secD_sub_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, bf16_sub_input
     la      t3, bf16_sub_exp
     li      t1, 1
@@ -788,6 +847,13 @@ D_sub_done:
     # -------------------------------------
     # Section E: bf16_mul （N=1, 成對）
     # -------------------------------------
+    la      a0, secE_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, bf16_mul_input
     la      t3, bf16_mul_exp
     li      t1, 1
@@ -878,6 +944,13 @@ E_done:
     # -------------------------------------
     # Section F: bf16_div （N=6, 成對）
     # -------------------------------------
+    la      a0, secF_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, bf16_div_input
     la      t3, bf16_div_exp
     li      t1, 6
@@ -968,6 +1041,13 @@ F_done:
     # -------------------------------------
     # Section G: bf16_sqrt （N=6，單一輸入）
     # -------------------------------------
+    la      a0, secG_msg
+    li      a7, 4
+    ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
     la      t0, bf16_sqrt_input
     la      t3, bf16_sqrt_exp
     li      t1, 6
@@ -1046,9 +1126,18 @@ G_after:
     addi    t2, t2, 1
     j       G_loop
 G_done:
-    li      a0, 0
-    li      a7, 10
+    # ---- RUN END BANNER ----
+    la      a0, end_msg
+    li      a7, 4
     ecall
+    li      a0, 10
+    li      a7, 11
+    ecall
+
+    li      a0, 0
+    li      a7, 10                 # 程式結束
+    ecall
+
 
 # ==================================================================================
 # bool bf16_isnan(uint16_t bits)
