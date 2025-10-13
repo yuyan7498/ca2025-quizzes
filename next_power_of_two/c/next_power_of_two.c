@@ -20,7 +20,7 @@ static inline unsigned clz(uint32_t x)
 // ------------------------------------------------------
 static inline uint32_t next_power_of_two(uint32_t x)
 {
-    if (x == 0u) return 1u;                 // 定義：0 的下一個 2 次方設為 1
+    if (x == 0u) return 1u;
     unsigned lz = clz(x - 1u);              // clz(x-1)
     return 1u << (32u - lz);                // 1 << (32 - clz(x-1))
 }
