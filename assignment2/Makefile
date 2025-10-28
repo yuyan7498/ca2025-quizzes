@@ -15,7 +15,7 @@ AS = $(CROSS_COMPILE)as
 LD = $(CROSS_COMPILE)ld
 OBJDUMP = $(CROSS_COMPILE)objdump
 
-OBJS = start.o main.o perfcounter.o
+OBJS = start.o main.o perfcounter.o uf8_main.o
 
 .PHONY: all run dump clean
 
@@ -25,6 +25,9 @@ $(EXEC): $(OBJS) $(LINKER_SCRIPT)
 	$(LD) $(LDFLAGS) -o $@ $(OBJS)
 
 %.o: %.S
+	$(AS) $(AFLAGS) $< -o $@
+
+%.o: %.s
 	$(AS) $(AFLAGS) $< -o $@
 
 %.o: %.c

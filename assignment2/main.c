@@ -25,6 +25,9 @@
 
 extern uint64_t get_cycles(void);
 extern uint64_t get_instret(void);
+extern uint32_t decode(uint32_t uf8);
+extern uint32_t encode(uint32_t value);
+extern uint32_t clz32(uint32_t value);
 
 /* Bare metal memcpy implementation */
 void *memcpy(void *dest, const void *src, size_t n)
@@ -432,14 +435,24 @@ static inline bf16_t bf16_div(bf16_t a, bf16_t b)
 
 /* ============= Test Suite ============= */
 
-static void test_bf16_add(void)
+static void test_bf16_add(uint64_t *cycles, uint64_t *instret)
 {
     TEST_LOGGER("Test: bf16_add\n");
 
     /* 1.0 + 1.0 = 2.0 */
     bf16_t a = {.bits = 0x3F80}; /* 1.0 */
     bf16_t b = {.bits = 0x3F80}; /* 1.0 */
+    uint64_t start_cycles = get_cycles();
+    uint64_t start_instret = get_instret();
     bf16_t result = bf16_add(a, b);
+    uint64_t end_cycles = get_cycles();
+    uint64_t end_instret = get_instret();
+
+    if (cycles)
+        *cycles = end_cycles - start_cycles;
+    if (instret)
+        *instret = end_instret - start_instret;
+
     TEST_LOGGER("  1.0 + 1.0 = ");
     print_hex(result.bits);
 
@@ -451,14 +464,24 @@ static void test_bf16_add(void)
     }
 }
 
-static void test_bf16_sub(void)
+static void test_bf16_sub(uint64_t *cycles, uint64_t *instret)
 {
     TEST_LOGGER("Test: bf16_sub\n");
 
     /* 3.0 - 2.0 = 1.0 */
     bf16_t a = {.bits = 0x4040}; /* 3.0 */
     bf16_t b = {.bits = 0x4000}; /* 2.0 */
+    uint64_t start_cycles = get_cycles();
+    uint64_t start_instret = get_instret();
     bf16_t result = bf16_sub(a, b);
+    uint64_t end_cycles = get_cycles();
+    uint64_t end_instret = get_instret();
+
+    if (cycles)
+        *cycles = end_cycles - start_cycles;
+    if (instret)
+        *instret = end_instret - start_instret;
+
     TEST_LOGGER("  3.0 - 2.0 = ");
     print_hex(result.bits);
 
@@ -470,14 +493,24 @@ static void test_bf16_sub(void)
     }
 }
 
-static void test_bf16_mul(void)
+static void test_bf16_mul(uint64_t *cycles, uint64_t *instret)
 {
     TEST_LOGGER("Test: bf16_mul\n");
 
     /* 2.0 * 3.0 = 6.0 */
     bf16_t a = {.bits = 0x4000}; /* 2.0 */
     bf16_t b = {.bits = 0x4040}; /* 3.0 */
+    uint64_t start_cycles = get_cycles();
+    uint64_t start_instret = get_instret();
     bf16_t result = bf16_mul(a, b);
+    uint64_t end_cycles = get_cycles();
+    uint64_t end_instret = get_instret();
+
+    if (cycles)
+        *cycles = end_cycles - start_cycles;
+    if (instret)
+        *instret = end_instret - start_instret;
+
     TEST_LOGGER("  2.0 * 3.0 = ");
     print_hex(result.bits);
 
@@ -489,14 +522,24 @@ static void test_bf16_mul(void)
     }
 }
 
-static void test_bf16_div(void)
+static void test_bf16_div(uint64_t *cycles, uint64_t *instret)
 {
     TEST_LOGGER("Test: bf16_div\n");
 
     /* 6.0 / 2.0 = 3.0 */
     bf16_t a = {.bits = 0x40C0}; /* 6.0 */
     bf16_t b = {.bits = 0x4000}; /* 2.0 */
+    uint64_t start_cycles = get_cycles();
+    uint64_t start_instret = get_instret();
     bf16_t result = bf16_div(a, b);
+    uint64_t end_cycles = get_cycles();
+    uint64_t end_instret = get_instret();
+
+    if (cycles)
+        *cycles = end_cycles - start_cycles;
+    if (instret)
+        *instret = end_instret - start_instret;
+
     TEST_LOGGER("  6.0 / 2.0 = ");
     print_hex(result.bits);
 
@@ -508,42 +551,145 @@ static void test_bf16_div(void)
     }
 }
 
-static void test_bf16_special_cases(void)
+static void test_bf16_special_cases(uint64_t *cycles, uint64_t *instret)
 {
     TEST_LOGGER("Test: bf16_special_cases\n");
 
     /* Test zero */
     bf16_t zero = BF16_ZERO();
-    TEST_LOGGER("  bf16_iszero(0): ");
-    if (bf16_iszero(zero)) {
-        TEST_LOGGER("PASSED\n");
-    } else {
-        TEST_LOGGER("FAILED\n");
-    }
-
-    /* Test NaN */
     bf16_t nan = BF16_NAN();
-    TEST_LOGGER("  bf16_isnan(NaN): ");
-    if (bf16_isnan(nan)) {
+    bf16_t inf = {.bits = 0x7F80};
+
+    uint64_t start_cycles = get_cycles();
+    uint64_t start_instret = get_instret();
+
+    bool zero_ok = bf16_iszero(zero);
+    bool nan_ok = bf16_isnan(nan);
+    bool inf_ok = bf16_isinf(inf);
+
+    uint64_t end_cycles = get_cycles();
+    uint64_t end_instret = get_instret();
+
+    if (cycles)
+        *cycles = end_cycles - start_cycles;
+    if (instret)
+        *instret = end_instret - start_instret;
+
+    TEST_LOGGER("  bf16_iszero(0): ");
+    if (zero_ok) {
         TEST_LOGGER("PASSED\n");
     } else {
         TEST_LOGGER("FAILED\n");
     }
 
-    /* Test infinity */
-    bf16_t inf = {.bits = 0x7F80};
+    TEST_LOGGER("  bf16_isnan(NaN): ");
+    if (nan_ok) {
+        TEST_LOGGER("PASSED\n");
+    } else {
+        TEST_LOGGER("FAILED\n");
+    }
+
     TEST_LOGGER("  bf16_isinf(Inf): ");
-    if (bf16_isinf(inf)) {
+    if (inf_ok) {
         TEST_LOGGER("PASSED\n");
     } else {
         TEST_LOGGER("FAILED\n");
     }
 }
 
+static void test_uf8_decode(uint64_t *cycles, uint64_t *instret)
+{
+    const uint32_t input = 31;
+    const uint32_t expected = 46;
+    uint64_t start_cycles = get_cycles();
+    uint64_t start_instret = get_instret();
+    uint32_t got = decode(input);
+    uint64_t end_cycles = get_cycles();
+    uint64_t end_instret = get_instret();
+
+    if (cycles)
+        *cycles = end_cycles - start_cycles;
+    if (instret)
+        *instret = end_instret - start_instret;
+
+    TEST_LOGGER("Test: uf8_decode\n");
+    TEST_LOGGER("  input: ");
+    print_dec((unsigned long) input);
+    TEST_LOGGER("  expected: ");
+    print_dec((unsigned long) expected);
+    TEST_LOGGER("  got: ");
+    print_dec((unsigned long) got);
+
+    if (got == expected) {
+        TEST_LOGGER("  PASSED\n");
+    } else {
+        TEST_LOGGER("  FAILED\n");
+    }
+}
+
+static void test_uf8_encode(uint64_t *cycles, uint64_t *instret)
+{
+    const uint32_t input = 480;
+    const uint32_t expected = 79;
+    uint64_t start_cycles = get_cycles();
+    uint64_t start_instret = get_instret();
+    uint32_t got = encode(input);
+    uint64_t end_cycles = get_cycles();
+    uint64_t end_instret = get_instret();
+
+    if (cycles)
+        *cycles = end_cycles - start_cycles;
+    if (instret)
+        *instret = end_instret - start_instret;
+
+    TEST_LOGGER("Test: uf8_encode\n");
+    TEST_LOGGER("  input: ");
+    print_dec((unsigned long) input);
+    TEST_LOGGER("  expected: ");
+    print_dec((unsigned long) expected);
+    TEST_LOGGER("  got: ");
+    print_dec((unsigned long) got);
+
+    if (got == expected) {
+        TEST_LOGGER("  PASSED\n");
+    } else {
+        TEST_LOGGER("  FAILED\n");
+    }
+}
+
+static void test_uf8_clz32(uint64_t *cycles, uint64_t *instret)
+{
+    const uint32_t input = 0x00F00000;
+    const uint32_t expected = 8;
+    uint64_t start_cycles = get_cycles();
+    uint64_t start_instret = get_instret();
+    uint32_t got = clz32(input);
+    uint64_t end_cycles = get_cycles();
+    uint64_t end_instret = get_instret();
+
+    if (cycles)
+        *cycles = end_cycles - start_cycles;
+    if (instret)
+        *instret = end_instret - start_instret;
+
+    TEST_LOGGER("Test: uf8_clz32\n");
+    TEST_LOGGER("  input: 0x");
+    print_hex(input);
+    TEST_LOGGER("  expected: ");
+    print_dec((unsigned long) expected);
+    TEST_LOGGER("  got: ");
+    print_dec((unsigned long) got);
+
+    if (got == expected) {
+        TEST_LOGGER("  PASSED\n");
+    } else {
+        TEST_LOGGER("  FAILED\n");
+    }
+}
+
 int main(void)
 {
-    uint64_t start_cycles, end_cycles, cycles_elapsed;
-    uint64_t start_instret, end_instret, instret_elapsed;
+    uint64_t cycles_elapsed, instret_elapsed;
 
     /* ChaCha20 section removed */
 
@@ -551,15 +697,7 @@ int main(void)
 
     /* Test 1: Addition */
     TEST_LOGGER("Test 1: bf16_add\n");
-    start_cycles = get_cycles();
-    start_instret = get_instret();
-
-    test_bf16_add();
-
-    end_cycles = get_cycles();
-    end_instret = get_instret();
-    cycles_elapsed = end_cycles - start_cycles;
-    instret_elapsed = end_instret - start_instret;
+    test_bf16_add(&cycles_elapsed, &instret_elapsed);
 
     TEST_LOGGER("  Cycles: ");
     print_dec((unsigned long) cycles_elapsed);
@@ -569,15 +707,7 @@ int main(void)
 
     /* Test 2: Subtraction */
     TEST_LOGGER("Test 2: bf16_sub\n");
-    start_cycles = get_cycles();
-    start_instret = get_instret();
-
-    test_bf16_sub();
-
-    end_cycles = get_cycles();
-    end_instret = get_instret();
-    cycles_elapsed = end_cycles - start_cycles;
-    instret_elapsed = end_instret - start_instret;
+    test_bf16_sub(&cycles_elapsed, &instret_elapsed);
 
     TEST_LOGGER("  Cycles: ");
     print_dec((unsigned long) cycles_elapsed);
@@ -587,15 +717,7 @@ int main(void)
 
     /* Test 3: Multiplication */
     TEST_LOGGER("Test 3: bf16_mul\n");
-    start_cycles = get_cycles();
-    start_instret = get_instret();
-
-    test_bf16_mul();
-
-    end_cycles = get_cycles();
-    end_instret = get_instret();
-    cycles_elapsed = end_cycles - start_cycles;
-    instret_elapsed = end_instret - start_instret;
+    test_bf16_mul(&cycles_elapsed, &instret_elapsed);
 
     TEST_LOGGER("  Cycles: ");
     print_dec((unsigned long) cycles_elapsed);
@@ -605,15 +727,7 @@ int main(void)
 
     /* Test 4: Division */
     TEST_LOGGER("Test 4: bf16_div\n");
-    start_cycles = get_cycles();
-    start_instret = get_instret();
-
-    test_bf16_div();
-
-    end_cycles = get_cycles();
-    end_instret = get_instret();
-    cycles_elapsed = end_cycles - start_cycles;
-    instret_elapsed = end_instret - start_instret;
+    test_bf16_div(&cycles_elapsed, &instret_elapsed);
 
     TEST_LOGGER("  Cycles: ");
     print_dec((unsigned long) cycles_elapsed);
@@ -623,15 +737,38 @@ int main(void)
 
     /* Test 5: Special cases */
     TEST_LOGGER("Test 5: bf16_special_cases\n");
-    start_cycles = get_cycles();
-    start_instret = get_instret();
+    test_bf16_special_cases(&cycles_elapsed, &instret_elapsed);
 
-    test_bf16_special_cases();
+    TEST_LOGGER("  Cycles: ");
+    print_dec((unsigned long) cycles_elapsed);
+    TEST_LOGGER("  Instructions: ");
+    print_dec((unsigned long) instret_elapsed);
 
-    end_cycles = get_cycles();
-    end_instret = get_instret();
-    cycles_elapsed = end_cycles - start_cycles;
-    instret_elapsed = end_instret - start_instret;
+    TEST_LOGGER("\n=== UF8 Tests ===\n\n");
+
+    /* Test 6: decode */
+    TEST_LOGGER("Test 6: uf8_decode\n");
+    test_uf8_decode(&cycles_elapsed, &instret_elapsed);
+
+    TEST_LOGGER("  Cycles: ");
+    print_dec((unsigned long) cycles_elapsed);
+    TEST_LOGGER("  Instructions: ");
+    print_dec((unsigned long) instret_elapsed);
+    TEST_LOGGER("\n");
+
+    /* Test 7: encode */
+    TEST_LOGGER("Test 7: uf8_encode\n");
+    test_uf8_encode(&cycles_elapsed, &instret_elapsed);
+
+    TEST_LOGGER("  Cycles: ");
+    print_dec((unsigned long) cycles_elapsed);
+    TEST_LOGGER("  Instructions: ");
+    print_dec((unsigned long) instret_elapsed);
+    TEST_LOGGER("\n");
+
+    /* Test 8: clz32 */
+    TEST_LOGGER("Test 8: uf8_clz32\n");
+    test_uf8_clz32(&cycles_elapsed, &instret_elapsed);
 
     TEST_LOGGER("  Cycles: ");
     print_dec((unsigned long) cycles_elapsed);
