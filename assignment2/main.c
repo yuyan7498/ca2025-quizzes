@@ -40,6 +40,7 @@ extern uint32_t bf16_add_asm(uint32_t a_bits, uint32_t b_bits);
 extern uint32_t bf16_sub_asm(uint32_t a_bits, uint32_t b_bits);
 extern uint32_t bf16_mul_asm(uint32_t a_bits, uint32_t b_bits);
 extern uint32_t bf16_div_asm(uint32_t a_bits, uint32_t b_bits);
+extern void hanoi_run(void);
 
 /* Bare metal memcpy implementation */
 void *memcpy(void *dest, const void *src, size_t n)
@@ -948,7 +949,8 @@ static void test_uf8_clz32_c(uint64_t *cycles, uint64_t *instret)
 
 int main(void)
 {
-    uint64_t cycles_elapsed, instret_elapsed;
+    uint64_t start_cycles, end_cycles, cycles_elapsed;
+    uint64_t start_instret, end_instret, instret_elapsed;
 
     
     TEST_LOGGER("\n=== BFloat16 ASM Tests ===\n\n");
@@ -1114,6 +1116,22 @@ int main(void)
     TEST_LOGGER("  Cycles: ");
     print_dec((unsigned long) cycles_elapsed);
     TEST_LOGGER("  Instructions: ");
+    print_dec((unsigned long) instret_elapsed);
+
+    TEST_LOGGER("\n=== Hanoi ASM ===\n\n");
+    start_cycles = get_cycles();
+    start_instret = get_instret();
+
+    hanoi_run();
+
+    end_cycles = get_cycles();
+    end_instret = get_instret();
+    cycles_elapsed = end_cycles - start_cycles;
+    instret_elapsed = end_instret - start_instret;
+
+    TEST_LOGGER("Total Hanoi Cycles: ");
+    print_dec((unsigned long) cycles_elapsed);
+    TEST_LOGGER("Total Hanoi Instructions: ");
     print_dec((unsigned long) instret_elapsed);
 
     TEST_LOGGER("\n=== All Tests Completed ===\n");
