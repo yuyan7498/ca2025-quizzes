@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include <limits.h>
 #include <string.h>
 
 #define printstr(ptr, length)                   \
@@ -31,6 +32,8 @@ extern uint32_t clz32(uint32_t value);
 extern uint32_t uf8_decode_c(uint32_t uf8);
 extern uint32_t uf8_encode_c(uint32_t value);
 extern uint32_t uf8_clz32_c(uint32_t value);
+extern uint32_t fast_rsqrt(uint32_t x);
+extern uint32_t fast_rsqrt_asm(uint32_t x);
 extern uint32_t bf16_isnan_asm(uint32_t bits);
 extern uint32_t bf16_isinf_asm(uint32_t bits);
 extern uint32_t bf16_iszero_asm(uint32_t bits);
@@ -93,6 +96,27 @@ static unsigned long umod(unsigned long dividend, unsigned long divisor)
     return remainder;
 }
 
+static uint64_t udiv64(uint64_t dividend, uint64_t divisor)
+{
+    if (divisor == 0)
+        return 0;
+
+    uint64_t quotient = 0;
+    uint64_t remainder = 0;
+
+    for (int i = 63; i >= 0; --i) {
+        remainder <<= 1;
+        remainder |= (dividend >> i) & 1ull;
+
+        if (remainder >= divisor) {
+            remainder -= divisor;
+            quotient |= (1ull << i);
+        }
+    }
+
+    return quotient;
+}
+
 /* Software multiplication for RV32I (no M extension) */
 static uint32_t umul(uint32_t a, uint32_t b)
 {
@@ -110,6 +134,29 @@ static uint32_t umul(uint32_t a, uint32_t b)
 uint32_t __mulsi3(uint32_t a, uint32_t b)
 {
     return umul(a, b);
+}
+
+typedef uint32_t (*fast_rsqrt_fn_t)(uint32_t);
+
+static uint64_t isqrt_u64(uint64_t value)
+{
+    uint64_t result = 0;
+    uint64_t bit = 1ull << 62;
+
+    while (bit > value)
+        bit >>= 2;
+
+    while (bit != 0) {
+        if (value >= result + bit) {
+            value -= result + bit;
+            result = (result >> 1) + bit;
+        } else {
+            result >>= 1;
+        }
+        bit >>= 2;
+    }
+
+    return result;
 }
 
 /* Simple integer to hex string conversion */
@@ -947,6 +994,100 @@ static void test_uf8_clz32_c(uint64_t *cycles, uint64_t *instret)
     }
 }
 
+static void run_fast_rsqrt_exact(fast_rsqrt_fn_t fn)
+{
+    static const struct {
+        uint32_t x;
+        uint32_t expected;
+    } cases[] = {
+        {1u, 65536u},
+        {4u, 32768u},
+        {16u, 16384u},
+        {256u, 4096u},
+        {65536u, 256u},
+        {UINT32_MAX, 1u},
+    };
+
+    bool first_fail = true;
+    uint32_t fail_x = 0, fail_expected = 0, fail_got = 0;
+
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        uint32_t got = fn(cases[i].x);
+
+        TEST_LOGGER("  input: ");
+        print_dec((unsigned long) cases[i].x);
+        TEST_LOGGER("  expected: ");
+        print_dec((unsigned long) cases[i].expected);
+        TEST_LOGGER("  got: ");
+        print_dec((unsigned long) got);
+
+        if (got == cases[i].expected) {
+            TEST_LOGGER("  Pass\n");
+        } else {
+            if (first_fail) {
+                fail_x = cases[i].x;
+                fail_expected = cases[i].expected;
+                fail_got = got;
+                first_fail = false;
+            }
+            TEST_LOGGER("  FAIL\n");
+        }
+        TEST_LOGGER("\n");
+    }
+
+    if (!first_fail) {
+        TEST_LOGGER("  First failure summary -> input: ");
+        print_dec((unsigned long) fail_x);
+        TEST_LOGGER("  expected: ");
+        print_dec((unsigned long) fail_expected);
+        TEST_LOGGER("  got: ");
+        print_dec((unsigned long) fail_got);
+        TEST_LOGGER("\n");
+    }
+}
+
+static void run_fast_rsqrt_accuracy(fast_rsqrt_fn_t fn)
+{
+    static const uint32_t samples[] = {
+        2u, 3u, 5u, 10u, 20u, 50u, 12345u, 100000u, 1000000u, 3000000000u
+    };
+
+    for (unsigned i = 0; i < sizeof(samples) / sizeof(samples[0]); ++i) {
+        uint32_t x = samples[i];
+        uint32_t y = fn(x);
+
+        uint64_t norm = (uint64_t) x << 32;
+        uint64_t root = isqrt_u64(norm);
+        if (root == 0)
+            root = 1;
+
+        uint32_t expected = (uint32_t) udiv64((uint64_t)1 << 32, root);
+        uint32_t tolerance = expected / 8u;
+        if (tolerance < 2u)
+            tolerance = 2u;
+
+        uint32_t delta = (y > expected) ? (y - expected) : (expected - y);
+
+        TEST_LOGGER("  input: ");
+        print_dec((unsigned long) x);
+        TEST_LOGGER("  expected: ");
+        print_dec((unsigned long) expected);
+        TEST_LOGGER("  got: ");
+        print_dec((unsigned long) y);
+        TEST_LOGGER("  tolerance: ");
+        print_dec((unsigned long) tolerance);
+        TEST_LOGGER("  delta: ");
+        print_dec((unsigned long) delta);
+
+        if (delta <= tolerance) {
+            TEST_LOGGER("  Pass\n");
+        } else {
+            TEST_LOGGER("  FAIL\n");
+        }
+        TEST_LOGGER("\n");
+    }
+}
+
 int main(void)
 {
     uint64_t start_cycles, end_cycles, cycles_elapsed;
@@ -1112,6 +1253,75 @@ int main(void)
     /* Test 16: clz32 (C) */
     TEST_LOGGER("Test 16: uf8_clz32_c\n");
     test_uf8_clz32_c(&cycles_elapsed, &instret_elapsed);
+
+    TEST_LOGGER("  Cycles: ");
+    print_dec((unsigned long) cycles_elapsed);
+    TEST_LOGGER("  Instructions: ");
+    print_dec((unsigned long) instret_elapsed);
+
+    TEST_LOGGER("\n=== fast_rsqrt Tests ===\n\n");
+
+    TEST_LOGGER("Test 17: fast_rsqrt_exact (ASM)\n");
+    start_cycles = get_cycles();
+    start_instret = get_instret();
+
+    run_fast_rsqrt_exact(fast_rsqrt_asm);
+
+    end_cycles = get_cycles();
+    end_instret = get_instret();
+    cycles_elapsed = end_cycles - start_cycles;
+    instret_elapsed = end_instret - start_instret;
+
+    TEST_LOGGER("  Cycles: ");
+    print_dec((unsigned long) cycles_elapsed);
+    TEST_LOGGER("  Instructions: ");
+    print_dec((unsigned long) instret_elapsed);
+    TEST_LOGGER("\n");
+
+    TEST_LOGGER("Test 18: fast_rsqrt_accuracy (ASM)\n");
+    start_cycles = get_cycles();
+    start_instret = get_instret();
+
+    run_fast_rsqrt_accuracy(fast_rsqrt_asm);
+
+    end_cycles = get_cycles();
+    end_instret = get_instret();
+    cycles_elapsed = end_cycles - start_cycles;
+    instret_elapsed = end_instret - start_instret;
+
+    TEST_LOGGER("  Cycles: ");
+    print_dec((unsigned long) cycles_elapsed);
+    TEST_LOGGER("  Instructions: ");
+    print_dec((unsigned long) instret_elapsed);
+    TEST_LOGGER("\n");
+
+    TEST_LOGGER("Test 19: fast_rsqrt_exact (C)\n");
+    start_cycles = get_cycles();
+    start_instret = get_instret();
+
+    run_fast_rsqrt_exact(fast_rsqrt);
+
+    end_cycles = get_cycles();
+    end_instret = get_instret();
+    cycles_elapsed = end_cycles - start_cycles;
+    instret_elapsed = end_instret - start_instret;
+
+    TEST_LOGGER("  Cycles: ");
+    print_dec((unsigned long) cycles_elapsed);
+    TEST_LOGGER("  Instructions: ");
+    print_dec((unsigned long) instret_elapsed);
+    TEST_LOGGER("\n");
+
+    TEST_LOGGER("Test 20: fast_rsqrt_accuracy (C)\n");
+    start_cycles = get_cycles();
+    start_instret = get_instret();
+
+    run_fast_rsqrt_accuracy(fast_rsqrt);
+
+    end_cycles = get_cycles();
+    end_instret = get_instret();
+    cycles_elapsed = end_cycles - start_cycles;
+    instret_elapsed = end_instret - start_instret;
 
     TEST_LOGGER("  Cycles: ");
     print_dec((unsigned long) cycles_elapsed);
