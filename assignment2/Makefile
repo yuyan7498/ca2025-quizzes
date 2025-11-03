@@ -15,7 +15,7 @@ AS = $(CROSS_COMPILE)as
 LD = $(CROSS_COMPILE)ld
 OBJDUMP = $(CROSS_COMPILE)objdump
 
-OBJS = start.o main.o perfcounter.o uf8_main.o uf8_c.o bf16_asm.o hanoi.o rsqrt.o rsqrt_asm.o
+OBJS = start.o main.o bf16.o perfcounter.o uf8_main.o uf8_c.o bf16_asm.o hanoi.o rsqrt.o rsqrt_asm.o
 
 .PHONY: all run dump clean
 
