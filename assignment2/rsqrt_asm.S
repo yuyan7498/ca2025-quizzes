@@ -3,8 +3,6 @@
 
     .extern clz32
     .extern rsqrt_table
-    .extern rsqrt_mul32
-    .extern rsqrt_mul32_u64
 
     .globl fast_rsqrt_asm
     .type fast_rsqrt_asm, @function
@@ -49,7 +47,7 @@ fast_rsqrt_asm:
 
     mv      a0, s4
     mv      a1, s5
-    call    rsqrt_mul32
+    jal     ra, rsqrt_mul32_internal
     mv      t0, a0              # low
     mv      t1, a1              # high
     slli    t2, t1, 16
@@ -63,14 +61,14 @@ fast_rsqrt_asm:
 
     mv      a0, s3
     mv      a1, s3
-    call    rsqrt_mul32
+    jal     ra, rsqrt_mul32_internal
     mv      t0, a0              # y_sq low
     mv      t1, a1              # y_sq high
 
     mv      a0, s0
     mv      a1, t0
     mv      a2, t1
-    call    rsqrt_mul32_u64
+    jal     ra, rsqrt_mul32_u64_internal
     mv      t2, a0              # prod low
     mv      t3, a1              # prod high
 
@@ -97,7 +95,7 @@ fast_rsqrt_asm:
     mv      a0, s3
     mv      a1, t5
     mv      a2, t4
-    call    rsqrt_mul32_u64
+    jal     ra, rsqrt_mul32_u64_internal
     mv      t0, a0
     mv      t1, a1
     srli    s3, t1, 1
@@ -123,3 +121,68 @@ fast_rsqrt_asm:
     ret
 
 .size fast_rsqrt_asm, .-fast_rsqrt_asm
+
+    .type rsqrt_mul32_internal, @function
+rsqrt_mul32_internal:
+    mv      t0, a0              # multiplicand low
+    li      t1, 0               # multiplicand high
+    mv      t2, a1              # multiplier
+    li      t3, 0               # result low
+    li      t4, 0               # result high
+
+.Lmul_loop:
+    beqz    t2, .Lmul_done
+    andi    t5, t2, 1
+    beqz    t5, .Lskip_add
+
+    add     t6, t3, t0
+    sltu    t5, t6, t3
+    add     t4, t4, t1
+    add     t4, t4, t5
+    mv      t3, t6
+
+.Lskip_add:
+    srli    t2, t2, 1
+    slli    t6, t1, 1
+    srli    t5, t0, 31
+    or      t1, t6, t5
+    slli    t0, t0, 1
+    j       .Lmul_loop
+
+.Lmul_done:
+    mv      a0, t3
+    mv      a1, t4
+    ret
+
+.size rsqrt_mul32_internal, .-rsqrt_mul32_internal
+
+    .type rsqrt_mul32_u64_internal, @function
+rsqrt_mul32_u64_internal:
+    addi    sp, sp, -20
+    sw      ra, 16(sp)
+    sw      a0, 12(sp)          # store multiplier a
+    sw      a2, 8(sp)           # store high part of b
+
+    jal     ra, rsqrt_mul32_internal
+    sw      a0, 0(sp)           # result low
+    sw      a1, 4(sp)           # result high
+
+    lw      t0, 8(sp)           # load b_hi
+    beqz    t0, .Lmul_u64_done
+
+    lw      a0, 12(sp)          # restore a
+    mv      a1, t0
+    jal     ra, rsqrt_mul32_internal
+
+    lw      t1, 4(sp)
+    add     t1, t1, a0
+    sw      t1, 4(sp)
+
+.Lmul_u64_done:
+    lw      a0, 0(sp)
+    lw      a1, 4(sp)
+    lw      ra, 16(sp)
+    addi    sp, sp, 20
+    ret
+
+.size rsqrt_mul32_u64_internal, .-rsqrt_mul32_u64_internal
