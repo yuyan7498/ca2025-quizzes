@@ -15,7 +15,7 @@
             "ecall;"                            \
             :                                   \
             : "r"(ptr), "r"(length)             \
-            : "a0", "a1", "a2", "a7");          \
+            : "a0", "a1", "a2", "a7", "memory");\
     } while (0)
 
 #define TEST_OUTPUT(msg, length) printstr(msg, length)
@@ -136,6 +136,102 @@ static uint32_t umul(uint32_t a, uint32_t b)
 uint32_t __mulsi3(uint32_t a, uint32_t b)
 {
     return umul(a, b);
+}
+
+typedef union {
+    uint64_t value;
+    struct {
+        uint32_t lo;
+        uint32_t hi;
+    } parts;
+} u64_parts_t;
+
+static inline void add_u64_parts(uint32_t *hi, uint32_t *lo, uint32_t add_hi,
+                                 uint32_t add_lo)
+{
+    uint32_t new_lo = *lo + add_lo;
+    uint32_t carry = (new_lo < *lo) ? 1u : 0u;
+    *lo = new_lo;
+    *hi = *hi + add_hi + carry;
+}
+
+uint64_t __muldi3(uint64_t a, uint64_t b)
+{
+    u64_parts_t multiplicand = {.value = a};
+    u64_parts_t multiplier = {.value = b};
+    uint32_t res_hi = 0;
+    uint32_t res_lo = 0;
+    uint32_t mul_hi = multiplicand.parts.hi;
+    uint32_t mul_lo = multiplicand.parts.lo;
+    uint32_t b_hi = multiplier.parts.hi;
+    uint32_t b_lo = multiplier.parts.lo;
+
+    while (b_hi || b_lo) {
+        if (b_lo & 1u)
+            add_u64_parts(&res_hi, &res_lo, mul_hi, mul_lo);
+
+        uint32_t carry_left = mul_lo >> 31;
+        mul_lo <<= 1;
+        mul_hi = (mul_hi << 1) | carry_left;
+
+        uint32_t new_b_lo = (b_lo >> 1) | (b_hi << 31);
+        uint32_t new_b_hi = b_hi >> 1;
+        b_lo = new_b_lo;
+        b_hi = new_b_hi;
+    }
+
+    u64_parts_t result = {.parts = {.lo = res_lo, .hi = res_hi}};
+    return result.value;
+}
+
+uint64_t __lshrdi3(uint64_t value, unsigned int shift)
+{
+    u64_parts_t v = {.value = value};
+
+    if (shift >= 64)
+        return 0;
+
+    if (shift >= 32) {
+        unsigned int s = shift - 32;
+        v.parts.lo = v.parts.hi >> s;
+        v.parts.hi = 0;
+        return v.value;
+    }
+
+    if (shift > 0) {
+        uint32_t new_lo =
+            (v.parts.lo >> shift) | (v.parts.hi << (32 - shift));
+        uint32_t new_hi = v.parts.hi >> shift;
+        v.parts.hi = new_hi;
+        v.parts.lo = new_lo;
+    }
+
+    return v.value;
+}
+
+uint64_t __ashldi3(uint64_t value, unsigned int shift)
+{
+    u64_parts_t v = {.value = value};
+
+    if (shift >= 64)
+        return 0;
+
+    if (shift >= 32) {
+        unsigned int s = shift - 32;
+        v.parts.hi = v.parts.lo << s;
+        v.parts.lo = 0;
+        return v.value;
+    }
+
+    if (shift > 0) {
+        uint32_t new_hi =
+            (v.parts.hi << shift) | (v.parts.lo >> (32 - shift));
+        uint32_t new_lo = v.parts.lo << shift;
+        v.parts.hi = new_hi;
+        v.parts.lo = new_lo;
+    }
+
+    return v.value;
 }
 
 typedef uint32_t (*fast_rsqrt_fn_t)(uint32_t);
